@@ -26,6 +26,23 @@ from database import db
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# --- DEBUG START ---
+print("--- ОТЛАДКА ТОКЕНА ---")
+token = config.BOT_TOKEN
+if not token:
+    print("❌ Токен пустой! (None или Empty String)")
+else:
+    print(f"✅ Длина токена: {len(token)}")
+    print(f"👀 Первые 5 символов: '{token[:5]}'")
+    print(f"👀 Последние 5 символов: '{token[-5:]}'")
+    # Проверка на кавычки
+    if token.startswith('"') or token.startswith("'"):
+        print("🚨 ВНИМАНИЕ: Токен начинается с кавычки! Удалите кавычки в Render!")
+    if " " in token:
+        print("🚨 ВНИМАНИЕ: В токене есть пробелы! Удалите их!")
+print("----------------------")
+# --- DEBUG END ---
+
 # Инициализация
 router = Router()
 bot = Bot(token=config.BOT_TOKEN)
