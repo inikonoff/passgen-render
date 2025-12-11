@@ -10,11 +10,11 @@ class Database:
     async def connect(self):
         """Подключение к базе данных с лимитами для Supabase"""
         try:
-            # min_size=1, max_size=5 — оптимально для бесплатного тарифа Supabase и Render
             self.pool = await asyncpg.create_pool(
                 config.DATABASE_URL,
                 min_size=1,
-                max_size=5
+                max_size=5,
+                statement_cache_size=0  # <--- ДОБАВЬ ВОТ ЭТУ СТРОЧКУ ОБЯЗАТЕЛЬНО
             )
             await self._create_tables()
             logging.info("✅ Успешное подключение к базе данных")
