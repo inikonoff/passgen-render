@@ -12,6 +12,7 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.exceptions import TelegramUnauthorizedError
 
 from config import config
 from states import PasswordStates
@@ -26,26 +27,9 @@ from database import db
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# --- DEBUG START ---
-print("--- ОТЛАДКА ТОКЕНА ---")
-token = config.BOT_TOKEN
-if not token:
-    print("❌ Токен пустой! (None или Empty String)")
-else:
-    print(f"✅ Длина токена: {len(token)}")
-    print(f"👀 Первые 5 символов: '{token[:5]}'")
-    print(f"👀 Последние 5 символов: '{token[-5:]}'")
-    # Проверка на кавычки
-    if token.startswith('"') or token.startswith("'"):
-        print("🚨 ВНИМАНИЕ: Токен начинается с кавычки! Удалите кавычки в Render!")
-    if " " in token:
-        print("🚨 ВНИМАНИЕ: В токене есть пробелы! Удалите их!")
-print("----------------------")
-# --- DEBUG END ---
-
 # Инициализация
 router = Router()
-bot = Bot(token=config.BOT_TOKEN)
+# Инициализацию бота перенесли внутрь main, чтобы проверить токен перед стартом
 dp = Dispatcher(storage=MemoryStorage())
 dp.include_router(router)
 
@@ -147,26 +131,32 @@ class PasswordGenerator:
         security_name, time_estimate = config.SECURITY_LEVELS[level]
         return security_name, time_estimate, combinations
 
-# ========== HANDLERS (Обработчики команд) ==========
+# ========== HANDLERS ==========
 
-@router.callback_query(F.data.startswith("option_"))
-async def toggle_option(callback: CallbackQuery, state: FSMContext):
-    # Исправление: убираем префикс "option_" целиком, чтобы сохранить хвост с подчеркиваниями
-    option = callback.data.replace("option_", "")
-    
-    data = await state.get_data()
-    # Получаем текущие настройки или создаем пустые по умолчанию
-    options = data.get('options', {
-        'exclude_similar': False, 
-        'require_all_types': False, 
-        'no_repeats': False
-    })
-    
-    # Переключаем значение (True <-> False)
-    options[option] = not options.get(option, False)
-    
-    await state.update_data(options=options)
-    await callback.message.edit_reply_markup(reply_markup=options_kb(options))
+@router.message(CommandStart())
+async def cmd_start(message: Message, state: FSMContext):
+    await db.get_or_create_user(
+        telegram_id=message.from_user.id,
+        username=message.from_user.username,
+        first_name=message.from_user.first_name,
+        last_name=message.from_user.last_name
+    )
+    await state.clear()
+    await state.set_state(PasswordStates.MAIN_MENU)
+    await message.answer(
+        f"👋 Привет, {message.from_user.first_name}!\n\n"
+        f"🔐 Я помогу сгенерировать надежный пароль.\n"
+        f"Выбери действие в меню ниже:",
+        reply_markup=main_menu_kb()
+    )
+
+@router.message(Command("help"))
+async def cmd_help(message: Message, state: FSMContext):
+    await show_help(message)
+
+@router.callback_query(F.data == "help")
+async def callback_help(callback: CallbackQuery, state: FSMContext):
+    await show_help(callback.message)
     await callback.answer()
 
 async def show_help(message: Message):
@@ -332,14 +322,19 @@ async def to_options(callback: CallbackQuery, state: FSMContext):
     )
     await callback.answer()
 
-# ========== OPTIONS ==========
+# ========== OPTIONS (ИСПРАВЛЕНО) ==========
 
 @router.callback_query(F.data.startswith("option_"))
 async def toggle_option(callback: CallbackQuery, state: FSMContext):
-    option = callback.data.split("_")[1]
+    # ИСПРАВЛЕНИЕ: Используем replace, а не split, чтобы сохранить подчеркивания
+    option = callback.data.replace("option_", "")
+    
     data = await state.get_data()
     options = data.get('options', {'exclude_similar': False, 'require_all_types': False, 'no_repeats': False})
+    
+    # Переключаем состояние
     options[option] = not options.get(option, False)
+    
     await state.update_data(options=options)
     await callback.message.edit_reply_markup(reply_markup=options_kb(options))
     await callback.answer()
@@ -381,7 +376,7 @@ def get_preview_text(params: Dict[str, Any]) -> str:
     else: combs = f"{combinations:,}"
     
     return (
-        f"📊 *Предпросмотр параметров*\n\n"
+        f"📊 *Далее будет создан пароль со следующими параметрами:*\n\n"
         f"• **Длина:** {params['length']} символов\n"
         f"• **Оценка безопасности:** {security_name}\n"
         f"• **Комбинации:** {combs}\n"
@@ -444,9 +439,10 @@ async def edit_params(callback: CallbackQuery, state: FSMContext):
     )
     await callback.answer()
 
-# ========== TEMPLATES (Save/Load) ==========
+# ========== TEMPLATES (Save/Load) - ИСПРАВЛЕНО ==========
 
-@router.callback_query(F.data == "save_template")
+# ИСПРАВЛЕНИЕ: Реагируем и на save_template (предпросмотр), и на save_current (после генерации)
+@router.callback_query(F.data.in_({"save_template", "save_current"}))
 async def save_template_start(callback: CallbackQuery, state: FSMContext):
     await state.set_state(PasswordStates.SAVE_TEMPLATE_NAME)
     await callback.message.edit_text(
@@ -472,7 +468,7 @@ async def save_template_finish(message: Message, state: FSMContext):
     user_id = (await db.get_or_create_user(message.from_user.id))['id']
     try:
         await db.save_template(user_id, name, params)
-        await message.answer(f"✅ Шаблон '{name}' сохранен!", reply_markup=main_menu_kb())
+        await message.answer(f"✅ Шаблон '{name}' сохранен", reply_markup=main_menu_kb())
         await state.set_state(PasswordStates.MAIN_MENU)
     except Exception as e:
         if "duplicate key" in str(e).lower():
@@ -610,10 +606,23 @@ async def on_shutdown(dispatcher: Dispatcher):
 async def main():
     logging.info("🚀 Запуск бота...")
     
+    # --- DEBUG START (ПРОВЕРКА ТОКЕНА) ---
+    token = config.BOT_TOKEN
+    if not token:
+        logging.critical("❌ ТОКЕН НЕ НАЙДЕН! Проверьте переменные окружения.")
+        return
+    
+    # Маскируем токен для логов, чтобы случайно не показать его
+    safe_token = f"{token[:5]}...{token[-5:]}" if len(token) > 10 else "СЛИШКОМ КОРОТКИЙ!"
+    logging.info(f"🔑 Бот использует токен: {safe_token}")
+    # --- DEBUG END ---
+
+    bot = Bot(token=config.BOT_TOKEN)
+
     try:
         await db.connect()
-    except Exception:
-        logging.critical("Не удалось подключиться к БД. Выход.")
+    except Exception as e:
+        logging.critical(f"Не удалось подключиться к БД: {e}")
         return
 
     dp.shutdown.register(on_shutdown)
@@ -621,6 +630,18 @@ async def main():
     # Запускаем веб-сервер
     await start_web_server()
     
+    # --- ОЧИСТКА ВЕБХУКОВ (ЛЕЧЕНИЕ КОНФЛИКТОВ) ---
+    try:
+        logging.info("🧹 Сброс вебхука и очистка очереди обновлений...")
+        await bot.delete_webhook(drop_pending_updates=True)
+        logging.info("✅ Вебхук успешно удален.")
+    except TelegramUnauthorizedError:
+         logging.critical("❌ ОШИБКА АВТОРИЗАЦИИ! Токен неверный. Сверьте первые/последние символы в логах.")
+         return
+    except Exception as e:
+        logging.error(f"⚠️ Ошибка при сбросе вебхука: {e}")
+    # ---------------------------------------------
+
     # Запускаем бота
     try:
         await dp.start_polling(bot)
