@@ -1,6 +1,6 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 
 def main_menu_kb() -> InlineKeyboardMarkup:
     """Главное меню"""
@@ -33,7 +33,7 @@ def length_kb() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 def char_types_kb(current_types: Dict[str, bool] = None) -> InlineKeyboardMarkup:
-    """Выбор типов символов"""
+    """Выбор типов символов (Только статус + текст)"""
     if current_types is None:
         current_types = {
             'digits': False,
@@ -44,22 +44,22 @@ def char_types_kb(current_types: Dict[str, bool] = None) -> InlineKeyboardMarkup
     
     builder = InlineKeyboardBuilder()
     
-    # Типы символов
+    # Убрали все лишние иконки из кортежей
     types_config = [
-        ('digits', 'Цифры (0-9)', '🔢'),
-        ('lowercase', 'Строчные буквы (a-z)', '🔠'),
-        ('uppercase', 'Заглавные буквы (A-Z)', '🔡'),
-        ('special', 'Спецсимволы (!@#$)', '⭐'),
+        ('digits', 'Цифры (0-9)'),
+        ('lowercase', 'Строчные буквы (a-z)'),
+        ('uppercase', 'Заглавные буквы (A-Z)'),
+        ('special', 'Спецсимволы (!@#$)'),
     ]
     
-    for key, text, icon in types_config:
-        checked = "✅" if current_types.get(key, False) else "❌"
+    for key, text in types_config:
+        # Логика простая: Если True -> ✅, Если False -> ❌
+        status = "✅" if current_types.get(key, False) else "❌"
         builder.row(InlineKeyboardButton(
-            text=f"{icon} {checked} {text}",
+            text=f"{status} {text}",
             callback_data=f"toggle_{key}"
         ))
     
-    # Кнопки навигации
     builder.row(
         InlineKeyboardButton(text="➡️ Далее", callback_data="to_options"),
         InlineKeyboardButton(text="↩️ Назад", callback_data="back_to_length")
@@ -68,7 +68,7 @@ def char_types_kb(current_types: Dict[str, bool] = None) -> InlineKeyboardMarkup
     return builder.as_markup()
 
 def options_kb(current_options: Dict[str, bool] = None) -> InlineKeyboardMarkup:
-    """Дополнительные опции"""
+    """Дополнительные опции (Только статус + текст)"""
     if current_options is None:
         current_options = {
             'exclude_similar': False,
@@ -78,16 +78,18 @@ def options_kb(current_options: Dict[str, bool] = None) -> InlineKeyboardMarkup:
     
     builder = InlineKeyboardBuilder()
     
+    # Полностью убрали иконки (👁️, ✅, 🔄) из названий
     options_config = [
-        ('exclude_similar', 'Исключить похожие символы (l/1, O/0)', '👁️'),
-        ('require_all_types', 'Обязательно все выбранные типы', '✅'),
-        ('no_repeats', 'Без повторяющихся символов', '🔄'),
+        ('exclude_similar', 'Исключить похожие символы (l/1, O/0)'),
+        ('require_all_types', 'Обязательно все выбранные типы'),
+        ('no_repeats', 'Без повторяющихся символов'),
     ]
     
-    for key, text, icon in options_config:
-        checked = "✅" if current_options.get(key, False) else "❌"
+    for key, text in options_config:
+        # Логика простая: Если True -> ✅, Если False -> ❌
+        status = "✅" if current_options.get(key, False) else "❌"
         builder.row(InlineKeyboardButton(
-            text=f"{icon} {checked} {text}",
+            text=f"{status} {text}",
             callback_data=f"option_{key}"
         ))
     
