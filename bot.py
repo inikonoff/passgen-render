@@ -369,18 +369,18 @@ async def to_preview(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 def get_preview_text(params: Dict[str, Any]) -> str:
-    security_name, time_estimate, combinations = PasswordGenerator.calculate_security(params)
+    # Игнорируем time_estimate (второй параметр), он нам больше не нужен
+    security_name, _, combinations = PasswordGenerator.calculate_security(params)
     
     if combinations >= 10**24: combs = f"{combinations / 10**24:.1f}×10²⁴"
     elif combinations >= 10**6: combs = f"{combinations / 10**6:.1f}×10⁶"
     else: combs = f"{combinations:,}"
     
     return (
-        f"📊 *Далее будет создан пароль со следующими параметрами:*\n\n"
-        f"• **Длина:** {params['length']} символов\n"
-        f"• **Оценка безопасности:** {security_name}\n"
+        f"📊 *Предпросмотр параметров*\n\n"
+        f"• **Количество символов:** {params['length']}\n"
         f"• **Комбинации:** {combs}\n"
-        f"• **Время подбора:** ~{time_estimate}\n\n"
+        f"• **Надёжность:** {security_name}\n\n"
         f"*Сгенерировать пароль?*"
     )
 
@@ -407,10 +407,23 @@ async def generate_and_send_password(message: Message, params: Dict[str, Any], s
     
     await message.bot.send_message(message.chat.id, f"`{password}`", parse_mode="Markdown")
     
-    security_name, _, _ = PasswordGenerator.calculate_security(params)
+    # Тут тоже убрали время и поменяли порядок
+    security_name, _, combinations = PasswordGenerator.calculate_security(params)
+    
+    if combinations >= 10**24: combs = f"{combinations / 10**24:.1f}×10²⁴"
+    elif combinations >= 10**6: combs = f"{combinations / 10**6:.1f}×10⁶"
+    else: combs = f"{combinations:,}"
+    
+    details_text = (
+        f"🔐 *Пароль готов 👆*\n\n"
+        f"• Символов: {params['length']}\n"
+        f"• Комбинации: {combs}\n"
+        f"• Надёжность: {security_name}"
+    )
+
     await message.bot.send_message(
         chat_id=message.chat.id,
-        text=f"🔐 Пароль готов!\nНадёжность: {security_name}",
+        text=details_text,
         reply_markup=generated_kb(),
         parse_mode="Markdown"
     )
