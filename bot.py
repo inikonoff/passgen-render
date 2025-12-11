@@ -132,30 +132,24 @@ class PasswordGenerator:
 
 # ========== HANDLERS (Обработчики команд) ==========
 
-@router.callback_query(F.data.in_({"save_template", "save_current"}))
-async def save_template_start(callback: CallbackQuery, state: FSMContext):
-    await db.get_or_create_user(
-        telegram_id=message.from_user.id,
-        username=message.from_user.username,
-        first_name=message.from_user.first_name,
-        last_name=message.from_user.last_name
-    )
-    await state.clear()
-    await state.set_state(PasswordStates.MAIN_MENU)
-    await message.answer(
-        f"👋 Привет, {message.from_user.first_name}!\n\n"
-        f"🔐 Я помогу сгенерировать надежный пароль.\n"
-        f"Выбери действие в меню ниже:",
-        reply_markup=main_menu_kb()
-    )
-
-@router.message(Command("help"))
-async def cmd_help(message: Message, state: FSMContext):
-    await show_help(message)
-
-@router.callback_query(F.data == "help")
-async def callback_help(callback: CallbackQuery, state: FSMContext):
-    await show_help(callback.message)
+@router.callback_query(F.data.startswith("option_"))
+async def toggle_option(callback: CallbackQuery, state: FSMContext):
+    # Исправление: убираем префикс "option_" целиком, чтобы сохранить хвост с подчеркиваниями
+    option = callback.data.replace("option_", "")
+    
+    data = await state.get_data()
+    # Получаем текущие настройки или создаем пустые по умолчанию
+    options = data.get('options', {
+        'exclude_similar': False, 
+        'require_all_types': False, 
+        'no_repeats': False
+    })
+    
+    # Переключаем значение (True <-> False)
+    options[option] = not options.get(option, False)
+    
+    await state.update_data(options=options)
+    await callback.message.edit_reply_markup(reply_markup=options_kb(options))
     await callback.answer()
 
 async def show_help(message: Message):
