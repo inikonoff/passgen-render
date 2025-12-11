@@ -132,8 +132,8 @@ class PasswordGenerator:
 
 # ========== HANDLERS (Обработчики команд) ==========
 
-@router.message(CommandStart())
-async def cmd_start(message: Message, state: FSMContext):
+@router.callback_query(F.data.in_({"save_template", "save_current"}))
+async def save_template_start(callback: CallbackQuery, state: FSMContext):
     await db.get_or_create_user(
         telegram_id=message.from_user.id,
         username=message.from_user.username,
